@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src import vfs  # noqa: E402
+from src import vfs
 
 
 def _make(tmp: str, files):

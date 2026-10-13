@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src import emulator, vfs  # noqa: E402
+from src import emulator, vfs
 
 
 def _make_vfs(files):
@@ -50,7 +50,7 @@ class TestParseInput(unittest.TestCase):
 class TestCommandsWithoutVfs(unittest.TestCase):
     """Команды без VFS должны сообщать об ошибке."""
 
-    def setUp(self):
+    def set_up(self):
         emulator.CONTEXT.vfs = None
 
     def test_ls_no_vfs(self):
@@ -72,12 +72,12 @@ class TestCommandsWithoutVfs(unittest.TestCase):
 class TestCommandsWithVfs(unittest.TestCase):
     """Команды с VFS: ls, cd, pwd."""
 
-    def setUp(self):
+    def set_up(self):
         emulator.CONTEXT.vfs = _make_vfs(
             ["a.txt", "d/b.txt", "d/e/c.txt"]
         )
 
-    def tearDown(self):
+    def tear_down(self):
         emulator.CONTEXT.vfs = None
 
     def test_pwd_initial(self):
@@ -141,10 +141,10 @@ class TestCommandsWithVfs(unittest.TestCase):
 class TestDispatch(unittest.TestCase):
     """Проверка диспетчера команд."""
 
-    def setUp(self):
+    def set_up(self):
         emulator.CONTEXT.vfs = _make_vfs(["x.txt"])
 
-    def tearDown(self):
+    def tear_down(self):
         emulator.CONTEXT.vfs = None
 
     def test_unknown_command(self):
@@ -170,7 +170,7 @@ class TestDispatch(unittest.TestCase):
 class TestPrompt(unittest.TestCase):
     """Проверка формирования приглашения."""
 
-    def setUp(self):
+    def set_up(self):
         emulator.CONTEXT.vfs = None
 
     def test_prompt_contains_at_and_dollar(self):
