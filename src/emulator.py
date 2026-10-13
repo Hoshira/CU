@@ -1,16 +1,17 @@
 """Эмулятор командной оболочки UNIX-подобной ОС.
 
-Этап 2: конфигурация через CLI-параметры и стартовый скрипт.
+Этап 3: подключена виртуальная файловая система (VFS).
 """
 
 import getpass
 import os
 import socket
 import sys
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .config import Config, format_debug, parse_args, validate_config
 from .script_runner import ScriptError, run_script_from_config
+from .vfs import Vfs, VfsError, load_tree
 
 PROMPT_TILDE = "~"
 HOST_UNKNOWN = "unknown-host"
@@ -20,13 +21,25 @@ EXIT_FAILURE = 1
 EXIT_CONFIG_ERROR = 2
 MAX_CD_ARGS = 1
 
-COMMANDS: Dict[str, str] = {
-    "ls": "ls: заглушка",
-    "cd": "cd: заглушка",
-    "pwd": "pwd: заглушка",
-    "help": "Список команд: ls, cd, pwd, help, exit",
-    "exit": "exit: завершение работы",
-}
+HELP_TEXT = "Список команд: ls, cd, pwd, help, exit"
+EXIT_TEXT = "exit: завершение работы"
+
+
+class ShellContext:
+    """Состояние текущей сессии эмулятора.
+
+    :param vfs: виртуальная файловая система или None.
+    """
+
+    def __init__(self, vfs: Optional[Vfs] = None) -> None:
+        self.vfs = vfs
+
+    def has_vfs(self) -> bool:
+        """Есть ли активная VFS в этой сессии."""
+        return self.vfs is not None
+
+
+CONTEXT = ShellContext()
 
 
 def get_username() -> str:
@@ -45,8 +58,8 @@ def get_hostname() -> str:
         return HOST_UNKNOWN
 
 
-def get_current_dir() -> str:
-    """Вернуть текущую директорию, заменив HOME на '~'."""
+def _host_cwd() -> str:
+    """Текущая директория реальной ОС с заменой HOME на '~'."""
     try:
         cwd = os.getcwd()
     except OSError:
@@ -57,15 +70,21 @@ def get_current_dir() -> str:
     return cwd
 
 
+def virtual_cwd() -> str:
+    """Текущая директория VFS или реальная, если VFS не задана."""
+    if CONTEXT.has_vfs():
+        return CONTEXT.vfs.path_str()
+    return _host_cwd()
+
+
 def build_prompt() -> str:
     """Сформировать приглашение вида user@host:cwd$."""
     user = get_username()
     host = get_hostname()
-    cwd = get_current_dir()
-    return f"{user}@{host}:{cwd}$ "
+    return f"{user}@{host}:{virtual_cwd()}$ "
 
 
-def parse_input(raw: str) -> tuple:
+def parse_input(raw: str) -> Tuple[Optional[str], List[str]]:
     """Разбить ввод на команду и список аргументов по пробелам."""
     tokens = raw.strip().split()
     if not tokens:
@@ -73,39 +92,68 @@ def parse_input(raw: str) -> tuple:
     return tokens[0], tokens[1:]
 
 
-def _print_stub(name: str, args: List[str]) -> int:
-    """Напечатать информацию о заглушке команды."""
-    print(COMMANDS.get(name, f"{name}: заглушка"))
-    joined = " ".join(args) if args else "(нет)"
-    print(f"  аргументы: {joined}")
-    return EXIT_SUCCESS
+def _require_vfs() -> Optional[Vfs]:
+    """Вернуть VFS или напечатать ошибку и вернуть None."""
+    if not CONTEXT.has_vfs():
+        print("команда недоступна: VFS не задана", file=sys.stderr)
+        return None
+    return CONTEXT.vfs
 
 
 def cmd_ls(args: List[str]) -> int:
-    """Заглушка команды ls: выводит имя и аргументы."""
-    return _print_stub("ls", args)
+    """Показать содержимое текущей директории VFS."""
+    vfs = _require_vfs()
+    if vfs is None:
+        return EXIT_SUCCESS
+    try:
+        items = vfs.listdir()
+    except VfsError as exc:
+        print(f"ls: {exc}", file=sys.stderr)
+        return EXIT_SUCCESS
+
+    if not items:
+        return EXIT_SUCCESS
+    for name, is_dir in items:
+        suffix = "/" if is_dir else ""
+        print(f"{name}{suffix}")
+    return EXIT_SUCCESS
 
 
 def cmd_cd(args: List[str]) -> int:
-    """Заглушка команды cd: выводит имя и аргументы."""
-    return _print_stub("cd", args)
+    """Сменить текущую директорию VFS."""
+    vfs = _require_vfs()
+    if vfs is None:
+        return EXIT_SUCCESS
+    if len(args) > MAX_CD_ARGS:
+        print("cd: слишком много аргументов", file=sys.stderr)
+        return EXIT_SUCCESS
+
+    target = args[0] if args else "/"
+    try:
+        vfs.change_dir(target)
+    except VfsError as exc:
+        print(f"cd: {exc}", file=sys.stderr)
+    return EXIT_SUCCESS
 
 
 def cmd_pwd(args: List[str]) -> int:
-    """Заглушка команды pwd: печатает текущую директорию."""
-    print(get_current_dir())
+    """Показать текущую директорию VFS."""
+    vfs = _require_vfs()
+    if vfs is None:
+        return EXIT_SUCCESS
+    print(vfs.path_str())
     return EXIT_SUCCESS
 
 
 def cmd_help(args: List[str]) -> int:
     """Показать список доступных команд."""
-    print(COMMANDS["help"])
+    print(HELP_TEXT)
     return EXIT_SUCCESS
 
 
 def cmd_exit(args: List[str]) -> int:
     """Команда выхода из эмулятора."""
-    print(COMMANDS["exit"])
+    print(EXIT_TEXT)
     return EXIT_FAILURE
 
 
@@ -126,18 +174,11 @@ def dispatch(command: str, args: List[str]) -> int:
     if handler is None:
         print(f"{command}: команда не найдена", file=sys.stderr)
         return EXIT_SUCCESS
-    if command == "cd" and len(args) > MAX_CD_ARGS:
-        print("cd: слишком много аргументов", file=sys.stderr)
-        return EXIT_SUCCESS
     return handler(args)
 
 
 def _read_line() -> Optional[str]:
-    """Прочитать строку из stdin, обработав EOF и Ctrl+C.
-
-    Возвращает None, если ввод завершён (EOF).
-    Возвращает '' при Ctrl+C.
-    """
+    """Прочитать строку, обработав EOF и Ctrl+C."""
     try:
         return input(build_prompt())
     except EOFError:
@@ -150,7 +191,7 @@ def _read_line() -> Optional[str]:
 
 def run_repl() -> int:
     """Запустить основной цикл REPL."""
-    print("Эмулятор оболочки (этап 2). Введите 'help' или 'exit'.")
+    print("Эмулятор оболочки (этап 3). Введите 'help' или 'exit'.")
     while True:
         raw = _read_line()
         if raw is None:
@@ -169,11 +210,23 @@ def print_config_errors(errors: List[str]) -> None:
         print(f"[config] {message}", file=sys.stderr)
 
 
-def prepare_config(argv: Optional[List[str]] = None) -> Config:
-    """Разобрать argv, проверить и напечатать отладку.
+def load_vfs(config: Config) -> Optional[Vfs]:
+    """Загрузить VFS, если путь задан.
 
-    Возвращает Config либо завершает процесс с кодом ошибки.
+    Возвращает Vfs или None (если путь не задан или при ошибке).
     """
+    if not config.vfs_path:
+        return None
+    try:
+        tree = load_tree(config.vfs_path)
+    except VfsError as exc:
+        print(f"[vfs] {exc}", file=sys.stderr)
+        return None
+    return Vfs(tree)
+
+
+def prepare_config(argv: Optional[List[str]] = None) -> Config:
+    """Разобрать argv, проверить и напечатать отладку."""
     config = parse_args(argv)
     print(format_debug(config))
     errors = validate_config(config)
@@ -196,6 +249,7 @@ def run_with_script(config: Config) -> int:
 def main(argv: Optional[List[str]] = None) -> int:
     """Точка входа приложения."""
     config = prepare_config(argv)
+    CONTEXT.vfs = load_vfs(config)
     if config.script_path:
         return run_with_script(config)
     return run_repl()

@@ -163,8 +163,8 @@ python3 -m unittest discover -s tests -v
 ### Запуск
 
 ```bash
-./run.sh --vfs ./data
+./run.sh --vfs ./vfs_samples/nested
 ./run.sh --script ./scripts/demo_commands.txt
-./run.sh --vfs ./data --script ./scripts/demo_commands.txt
+./run.sh --vfs ./vfs_samples/nested --script ./scripts/demo_commands.txt
 ./run.sh                                   # интерактивный REPL
 ```

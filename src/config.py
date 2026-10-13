@@ -75,15 +75,18 @@ def parse_args(argv: Optional[List[str]] = None) -> Config:
 
 
 def validate_config(config: Config) -> List[str]:
-    """Проверить конфигурацию и вернуть список сообщений об ошибках.
-
-    Пустой список означает, что всё корректно.
-    """
+    """Проверить конфигурацию и вернуть список сообщений об ошибках."""
     errors: List[str] = []
-    if config.vfs_path and not os.path.isdir(config.vfs_path):
-        errors.append(f"VFS не найдена: {config.vfs_path}")
+
+    if config.vfs_path:
+        if not os.path.exists(config.vfs_path):
+            errors.append(f"VFS не найдена: {config.vfs_path}")
+        elif not os.path.isdir(config.vfs_path):
+            errors.append(f"VFS не директория: {config.vfs_path}")
+
     if config.script_path and not os.path.isfile(config.script_path):
         errors.append(f"Скрипт не найден: {config.script_path}")
+
     return errors
 
 

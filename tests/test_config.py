@@ -46,16 +46,28 @@ class TestValidateConfig(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("VFS не найдена", errors[0])
 
-    def test_existing_vfs(self):
+    def test_existing_dir_is_valid(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = config.Config(vfs_path=tmp)
             self.assertEqual(config.validate_config(cfg), [])
+
+    def test_file_instead_of_dir_is_invalid(self):
+        with tempfile.NamedTemporaryFile() as fp:
+            cfg = config.Config(vfs_path=fp.name)
+            errors = config.validate_config(cfg)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("не директория", errors[0])
 
     def test_missing_script(self):
         cfg = config.Config(script_path="C:/no/such/file.txt")
         errors = config.validate_config(cfg)
         self.assertEqual(len(errors), 1)
         self.assertIn("Скрипт не найден", errors[0])
+
+    def test_existing_script_is_valid(self):
+        with tempfile.NamedTemporaryFile(suffix=".txt") as fp:
+            cfg = config.Config(script_path=fp.name)
+            self.assertEqual(config.validate_config(cfg), [])
 
 
 class TestFormatDebug(unittest.TestCase):

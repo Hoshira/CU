@@ -1,0 +1,44 @@
+# Демонстрационный скрипт команд эмулятора (этап 3).
+# Работает с VFS: vfs_samples/nested
+# Структура: /level_1/level_2/level_3/deep.txt
+
+# --- базовые команды без VFS ---
+help
+
+# --- работа с VFS ---
+pwd
+ls
+cd level_1
+pwd
+ls
+cd level_2
+pwd
+ls
+cd level_3
+pwd
+ls
+cd ..
+pwd
+cd ../..
+pwd
+cd /
+pwd
+ls
+
+# --- абсолютные пути ---
+cd /level_1/level_2
+pwd
+cd /level_1/level_2/level_3
+pwd
+ls
+
+# --- обработка ошибок ---
+cd /no/such/dir
+cd unknown_dir
+cd a b
+cd deep.txt
+ls
+unknown_command
+
+# --- выход ---
+exit
