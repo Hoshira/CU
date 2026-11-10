@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src import emulator, script_runner  # noqa: E402
+from src import emulator, script_runner
 
 
 def _write(tmp_dir, name, content):

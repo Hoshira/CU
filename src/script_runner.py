@@ -12,7 +12,7 @@ from typing import Callable, List, Tuple
 from .config import Config
 
 COMMENT_PREFIX = "#"
-PROMPT_TEMPLATE = "{cwd}$ "
+ECHO_TEMPLATE = "> {}"
 
 
 class ScriptError(Exception):
@@ -41,6 +41,34 @@ def read_script_lines(path: str) -> List[str]:
     return lines
 
 
+def echo_line(line: str) -> None:
+    """Напечатать строку, имитируя ввод пользователя."""
+    print(ECHO_TEMPLATE.format(line))
+
+
+def safe_dispatch(
+    line: str,
+    dispatch: Callable[[str, List[str]], int],
+    parse_input: Callable[[str], Tuple[str, List[str]]],
+) -> bool:
+    """Выполнить одну строку, перехватив исключения.
+
+    Возвращает True, если строка обработана без исключения.
+    """
+    command, args = parse_input(line)
+    if command is None:
+        return False
+    try:
+        dispatch(command, args)
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[script] ошибка при выполнении '{line}': {exc}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def run_script(
     path: str,
     dispatch: Callable[[str, List[str]], int],
@@ -58,23 +86,11 @@ def run_script(
     """
     lines = read_script_lines(path)
     success_count = 0
-
     for line in lines:
         if echo:
-            print(f"> {line}")
-        command, args = parse_input(line)
-        if command is None:
-            continue
-        try:
-            dispatch(command, args)
-        except Exception as exc:
-            print(
-                f"[script] ошибка при выполнении '{line}': {exc}",
-                file=sys.stderr,
-            )
-            continue
-        success_count += 1
-
+            echo_line(line)
+        if safe_dispatch(line, dispatch, parse_input):
+            success_count += 1
     return success_count
 
 

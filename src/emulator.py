@@ -46,7 +46,7 @@ def get_username() -> str:
     """Вернуть имя текущего пользователя."""
     try:
         return getpass.getuser()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "user"
 
 
@@ -54,7 +54,7 @@ def get_hostname() -> str:
     """Вернуть имя хоста текущей машины."""
     try:
         return socket.gethostname() or HOST_UNKNOWN
-    except Exception:  # noqa: BLE001
+    except Exception:
         return HOST_UNKNOWN
 
 
